@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+sender/.venv/
+sender_output/
+logs/
+receiver/target/
+receiver/data/
+receiver/uploads/
+receiver/logs/
+front/node_modules/
+front/dist/
+.codebase-memory

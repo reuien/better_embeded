@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: plc-defect-receiver
+  datasource:
+    url: jdbc:sqlite:data/plc_detection.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
+
+plc:
+  upload-root: uploads
+  frontend-dir: ../front/dist
+  device-online-seconds: 60
+
+logging:
+  file:
+    name: logs/receiver.log
+  level:
+    root: INFO
+    com.mos.plc: INFO

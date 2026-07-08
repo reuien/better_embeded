@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:sqlite:file:plc_detection_test?mode=memory&cache=shared
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+
+plc:
+  upload-root: target/test-uploads
+  frontend-dir: ../front/dist
