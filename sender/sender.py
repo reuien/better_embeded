@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
 
 import cv2
@@ -215,6 +216,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--jpeg-quality", type=int, default=80)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--retry", type=int, default=3)
+    parser.add_argument("--receiver-check-retry", type=int, default=5)
+    parser.add_argument("--receiver-check-timeout", type=float, default=3.0)
+    parser.add_argument("--skip-receiver-check", action="store_true")
     parser.add_argument(
         "--use-system-proxy",
         action="store_true",
@@ -223,6 +227,47 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--heartbeat-url", help="Optional device heartbeat URL")
     parser.add_argument("--heartbeat-interval", type=float, default=30.0)
     return parser.parse_args()
+
+
+def receiver_check_url(server_url: str) -> str:
+    parsed = urlparse(server_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid server URL: {server_url}")
+    return urlunparse((parsed.scheme, parsed.netloc, "/api/system-status", "", "", ""))
+
+
+def check_receiver(args: argparse.Namespace) -> None:
+    if args.skip_receiver_check:
+        logging.warning("receiver preflight check skipped")
+        return
+
+    check_url = receiver_check_url(args.server_url)
+    session = requests.Session()
+    session.trust_env = args.use_system_proxy
+    last_error = ""
+    for attempt in range(1, args.receiver_check_retry + 1):
+        try:
+            response = session.get(check_url, timeout=args.receiver_check_timeout)
+            response.raise_for_status()
+            logging.info("receiver reachable checkUrl=%s status=%s", check_url, response.status_code)
+            return
+        except requests.RequestException as exc:
+            last_error = str(exc)
+            logging.warning(
+                "receiver preflight failed attempt=%s/%s url=%s error=%s",
+                attempt,
+                args.receiver_check_retry,
+                check_url,
+                exc,
+            )
+            time.sleep(min(attempt, 3))
+
+    raise RuntimeError(
+        "Receiver is not reachable before startup. "
+        f"checkUrl={check_url}; lastError={last_error}. "
+        "Confirm the macOS receiver is running on 192.168.32.197:8080, "
+        "Mac firewall allows port 8080, and Windows is on 192.168.32.249."
+    )
 
 
 def configure_logging(log_file: Path) -> None:
@@ -349,6 +394,7 @@ def main() -> None:
         args.server_url,
         args.use_system_proxy,
     )
+    check_receiver(args)
     web_state = SenderWebState(args.device_id, args.server_url)
     web_server = start_web_server(args, web_state)
     model = YOLO(str(model_path))

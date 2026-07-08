@@ -36,10 +36,17 @@ Find the Mac LAN IP for the Windows sender:
 ipconfig getifaddr en0
 ```
 
+Current deployment addresses:
+
+```text
+Windows sender: 192.168.32.249
+macOS receiver: 192.168.32.197
+```
+
 Upload endpoint for Windows sender:
 
 ```text
-http://<mac-ip>:8080/api/detection-records
+http://192.168.32.197:8080/api/detection-records
 ```
 
 ## Run Windows Sender
@@ -55,11 +62,19 @@ Run sender:
 
 ```powershell
 cd C:\mos
-$env:RECEIVER_URL="http://<mac-ip>:8080/api/detection-records"
+$env:RECEIVER_URL="http://192.168.32.197:8080/api/detection-records"
 $env:DEVICE_ID="PLC-WIN-01"
 $env:YOLO_DEVICE="cpu"
 .\scripts\run_sender_windows.bat
 ```
+
+Before starting model inference, the Windows script checks:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://192.168.32.197:8080/api/system-status
+```
+
+If this fails, start the macOS receiver first and allow port `8080` in macOS firewall.
 
 Open the sender live preview page on the Windows host:
 
@@ -86,10 +101,26 @@ For NVIDIA GPU, install CUDA PyTorch from:
 https://pytorch.org/get-started/locally/
 ```
 
+For CUDA 12.1, the typical commands are:
+
+```powershell
+conda activate sender
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install -r sender\requirements.txt
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```
+
 Then set:
 
 ```powershell
 $env:YOLO_DEVICE="0"
+```
+
+If `import cv2` fails, install the sender dependencies in the same environment that runs the sender:
+
+```powershell
+pip install -r sender\requirements.txt
+python -c "import sys, cv2, torch; print(sys.executable); print(cv2.__version__); print(torch.cuda.is_available())"
 ```
 
 ## REST APIs
