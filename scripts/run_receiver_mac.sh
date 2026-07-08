@@ -6,5 +6,6 @@ echo "macOS receiver expected IP: ${MAC_IP:-unknown}"
 echo "Receiver dashboard: http://${MAC_IP:-127.0.0.1}:8080/"
 echo "Receiver health:    http://${MAC_IP:-127.0.0.1}:8080/api/system-status"
 echo
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Djava.net.preferIPv4Stack=true"
 cd receiver
 mvn spring-boot:run

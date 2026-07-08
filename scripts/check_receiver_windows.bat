@@ -1,8 +1,8 @@
 @echo off
 setlocal
 cd /d "%~dp0\.."
-set MAC_RECEIVER_IP=192.168.32.197
-set WINDOWS_SENDER_IP=192.168.32.249
+set MAC_RECEIVER_IP=10.84.87.28
+set WINDOWS_SENDER_IP=10.84.67.62
 set CHECK_URL=http://%MAC_RECEIVER_IP%:8080/api/system-status
 set HTTP_PROXY=
 set HTTPS_PROXY=

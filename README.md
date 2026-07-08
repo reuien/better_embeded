@@ -20,14 +20,14 @@ The Spring Boot receiver serves `front/dist`.
 ## Run macOS Receiver
 
 ```bash
-cd receiver
-mvn spring-boot:run
+./scripts/run_receiver_mac.sh
 ```
 
 Open:
 
 ```text
 http://127.0.0.1:8080
+http://10.84.87.28:8080
 ```
 
 Find the Mac LAN IP for the Windows sender:
@@ -39,14 +39,14 @@ ipconfig getifaddr en0
 Current deployment addresses:
 
 ```text
-Windows sender: 192.168.32.249
-macOS receiver: 192.168.32.197
+Windows sender: 10.84.67.62
+macOS receiver: 10.84.87.28
 ```
 
 Upload endpoint for Windows sender:
 
 ```text
-http://192.168.32.197:8080/api/detection-records
+http://10.84.87.28:8080/api/detection-records
 ```
 
 ## Run Windows Sender
@@ -62,25 +62,25 @@ Run sender:
 
 ```powershell
 cd C:\mos
-$env:RECEIVER_URL="http://192.168.32.197:8080/api/detection-records"
 $env:DEVICE_ID="PLC-WIN-01"
 $env:YOLO_DEVICE="cpu"
 .\scripts\run_sender_windows.bat
 ```
-
-Before starting model inference, the Windows script checks:
-
-```powershell
-Invoke-WebRequest -UseBasicParsing http://192.168.32.197:8080/api/system-status
-```
-
-If this fails, start the macOS receiver first and allow port `8080` in macOS firewall.
 
 Open the sender live preview page on the Windows host:
 
 ```text
 http://127.0.0.1:8090
 ```
+
+In the sender page:
+
+- Set `macOS receiver IP` to `10.84.87.28`.
+- Set `receiver port` to `8080`.
+- Click `Test`. It calls `http://10.84.87.28:8080/api/system-status` without system proxy.
+- Click `Start` only after the test is reachable.
+
+If `Test` fails, start the macOS receiver first, allow port `8080` in macOS firewall, and check that the WiFi/router allows traffic between `10.84.67.62` and `10.84.87.28`.
 
 The receiver dashboard shows uploaded history and saved result images. The sender live page shows the current camera inference frame, model result, confidence, local image path, and upload status.
 
