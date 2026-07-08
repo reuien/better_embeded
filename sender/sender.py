@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import socket
 import time
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from threading import Lock, Thread
 from typing import Any
 from uuid import uuid4
 
@@ -22,6 +25,172 @@ CAMERA_APIS = {
     "msmf": getattr(cv2, "CAP_MSMF", 0),
     "avfoundation": getattr(cv2, "CAP_AVFOUNDATION", 0),
 }
+
+
+SENDER_PAGE = b"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLC Sender Live</title>
+  <style>
+    :root { color-scheme: light; font-family: Arial, sans-serif; background: #f4f6f8; color: #1e293b; }
+    body { margin: 0; }
+    header { background: #0b1f18; color: #fff; padding: 18px 24px; }
+    h1 { margin: 0; font-size: 24px; }
+    main { display: grid; grid-template-columns: minmax(320px, 1fr) 360px; gap: 16px; padding: 16px; }
+    .panel { background: #fff; border: 1px solid #d9e0e7; border-radius: 6px; overflow: hidden; }
+    .video { width: 100%; min-height: 360px; background: #111; object-fit: contain; display: block; }
+    .stats { padding: 16px; display: grid; gap: 12px; }
+    .row { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid #eef2f5; padding-bottom: 8px; }
+    .row span:first-child { color: #64748b; }
+    .value { font-weight: 700; text-align: right; word-break: break-word; }
+    .defect { color: #c62828; }
+    .normal { color: #15803d; }
+    .failed { color: #c2410c; }
+    .success { color: #15803d; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PLC Sender Live</h1>
+    <div>Camera inference, local save, and receiver upload status</div>
+  </header>
+  <main>
+    <section class="panel">
+      <img class="video" src="/stream.mjpg" alt="live detection stream">
+    </section>
+    <aside class="panel stats">
+      <div class="row"><span>Device</span><span class="value" id="deviceId">-</span></div>
+      <div class="row"><span>Receiver</span><span class="value" id="serverUrl">-</span></div>
+      <div class="row"><span>Result</span><span class="value" id="result">-</span></div>
+      <div class="row"><span>Defect type</span><span class="value" id="defectType">-</span></div>
+      <div class="row"><span>Confidence</span><span class="value" id="confidence">-</span></div>
+      <div class="row"><span>Detections</span><span class="value" id="detections">-</span></div>
+      <div class="row"><span>Upload</span><span class="value" id="uploadStatus">-</span></div>
+      <div class="row"><span>Last image</span><span class="value" id="imagePath">-</span></div>
+      <div class="row"><span>Updated</span><span class="value" id="updatedAt">-</span></div>
+      <div class="row"><span>Error</span><span class="value failed" id="uploadError">-</span></div>
+    </aside>
+  </main>
+  <script>
+    const ids = ["deviceId", "serverUrl", "result", "defectType", "confidence", "detections", "uploadStatus", "imagePath", "updatedAt", "uploadError"];
+    async function refreshStatus() {
+      try {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        const data = await response.json();
+        for (const id of ids) document.getElementById(id).textContent = data[id] ?? "-";
+        const result = document.getElementById("result");
+        result.className = "value " + (data.result === "defect" ? "defect" : "normal");
+        const upload = document.getElementById("uploadStatus");
+        upload.className = "value " + (data.uploadStatus || "");
+      } catch (error) {
+        document.getElementById("uploadError").textContent = String(error);
+      }
+    }
+    refreshStatus();
+    setInterval(refreshStatus, 1000);
+  </script>
+</body>
+</html>"""
+
+
+class SenderWebState:
+    def __init__(self, device_id: str, server_url: str) -> None:
+        self.lock = Lock()
+        self.latest_jpeg: bytes | None = None
+        self.status: dict[str, Any] = {
+            "deviceId": device_id,
+            "serverUrl": server_url,
+            "result": "waiting",
+            "defectType": "-",
+            "confidence": "-",
+            "detections": 0,
+            "uploadStatus": "waiting",
+            "uploadError": "-",
+            "imagePath": "-",
+            "updatedAt": "-",
+            "stopped": False,
+        }
+
+    def update(self, **values: Any) -> None:
+        with self.lock:
+            self.status.update(values)
+
+    def update_frame(self, frame_jpeg: bytes, **values: Any) -> None:
+        with self.lock:
+            self.latest_jpeg = frame_jpeg
+            self.status.update(values)
+
+    def snapshot(self) -> tuple[bytes | None, dict[str, Any]]:
+        with self.lock:
+            return self.latest_jpeg, dict(self.status)
+
+
+def make_web_handler(state: SenderWebState) -> type[BaseHTTPRequestHandler]:
+    class SenderWebHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path in ("/", "/index.html"):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(SENDER_PAGE)))
+                self.end_headers()
+                self.wfile.write(SENDER_PAGE)
+                return
+            if self.path == "/api/status":
+                self.write_json(state.snapshot()[1])
+                return
+            if self.path == "/stream.mjpg":
+                self.stream_frames()
+                return
+            self.send_error(404)
+
+        def write_json(self, payload: dict[str, Any]) -> None:
+            body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def stream_frames(self) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                while True:
+                    jpeg, status = state.snapshot()
+                    if status.get("stopped"):
+                        return
+                    if jpeg is None:
+                        time.sleep(0.2)
+                        continue
+                    self.wfile.write(b"--frame\r\n")
+                    self.wfile.write(b"Content-Type: image/jpeg\r\n")
+                    self.wfile.write(f"Content-Length: {len(jpeg)}\r\n\r\n".encode("ascii"))
+                    self.wfile.write(jpeg)
+                    self.wfile.write(b"\r\n")
+                    time.sleep(0.1)
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
+        def log_message(self, format: str, *args: Any) -> None:
+            logging.debug("sender web: " + format, *args)
+
+    return SenderWebHandler
+
+
+def start_web_server(args: argparse.Namespace, state: SenderWebState) -> ThreadingHTTPServer | None:
+    if args.no_web:
+        return None
+    server = ThreadingHTTPServer((args.web_host, args.web_port), make_web_handler(state))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logging.info("sender web page running at http://%s:%s", args.web_host, args.web_port)
+    return server
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,8 +209,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", default="sender_output")
     parser.add_argument("--log-file", default="logs/sender.log")
     parser.add_argument("--preview", action="store_true")
+    parser.add_argument("--no-web", action="store_true", help="Disable the sender local web preview page")
+    parser.add_argument("--web-host", default="0.0.0.0")
+    parser.add_argument("--web-port", type=int, default=8090)
+    parser.add_argument("--jpeg-quality", type=int, default=80)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--retry", type=int, default=3)
+    parser.add_argument(
+        "--use-system-proxy",
+        action="store_true",
+        help="Use HTTP_PROXY/HTTPS_PROXY from the system environment. Disabled by default for LAN uploads.",
+    )
     parser.add_argument("--heartbeat-url", help="Optional device heartbeat URL")
     parser.add_argument("--heartbeat-interval", type=float, default=30.0)
     return parser.parse_args()
@@ -111,7 +289,7 @@ def save_images(output_root: Path, frame, annotated, result: str) -> Path:
     return annotated_path
 
 
-def upload(server_url: str, image_path: Path, args: argparse.Namespace, result: str, defect_type: str, confidence: float) -> None:
+def upload(server_url: str, image_path: Path, args: argparse.Namespace, result: str, defect_type: str, confidence: float) -> bool:
     data = {
         "deviceId": args.device_id,
         "result": result,
@@ -119,10 +297,12 @@ def upload(server_url: str, image_path: Path, args: argparse.Namespace, result: 
         "confidence": f"{confidence:.6f}",
         "detectTime": datetime.now().isoformat(timespec="seconds"),
     }
+    session = requests.Session()
+    session.trust_env = args.use_system_proxy
     for attempt in range(1, args.retry + 1):
         try:
             with image_path.open("rb") as file:
-                response = requests.post(
+                response = session.post(
                     server_url,
                     data=data,
                     files={"image": (image_path.name, file, "image/jpeg")},
@@ -130,11 +310,12 @@ def upload(server_url: str, image_path: Path, args: argparse.Namespace, result: 
                 )
             response.raise_for_status()
             logging.info("upload success result=%s defectType=%s image=%s", result, defect_type, image_path)
-            return
+            return True
         except requests.RequestException as exc:
             logging.warning("upload failed attempt=%s/%s error=%s", attempt, args.retry, exc)
             time.sleep(min(2 * attempt, 8))
-    raise RuntimeError(f"Upload failed after {args.retry} attempts: {image_path}")
+    logging.error("upload failed after %s attempts image=%s", args.retry, image_path)
+    return False
 
 
 def heartbeat(args: argparse.Namespace, model_name: str) -> None:
@@ -146,7 +327,9 @@ def heartbeat(args: argparse.Namespace, model_name: str) -> None:
         "modelName": model_name,
     }
     try:
-        requests.put(args.heartbeat_url, json=payload, timeout=5).raise_for_status()
+        session = requests.Session()
+        session.trust_env = args.use_system_proxy
+        session.put(args.heartbeat_url, json=payload, timeout=5).raise_for_status()
         logging.info("heartbeat success device=%s", args.device_id)
     except requests.RequestException as exc:
         logging.warning("heartbeat failed error=%s", exc)
@@ -159,7 +342,15 @@ def main() -> None:
     if not model_path.exists():
         raise FileNotFoundError(f"Model not found: {model_path}")
 
-    logging.info("sender starting device=%s model=%s", args.device_id, model_path)
+    logging.info(
+        "sender starting device=%s model=%s server=%s systemProxy=%s",
+        args.device_id,
+        model_path,
+        args.server_url,
+        args.use_system_proxy,
+    )
+    web_state = SenderWebState(args.device_id, args.server_url)
+    web_server = start_web_server(args, web_state)
     model = YOLO(str(model_path))
     capture = open_camera(args)
     output_root = Path(args.output)
@@ -178,12 +369,36 @@ def main() -> None:
 
             result, defect_type, confidence, detections, annotated = predict(model, frame, args)
             image_path = save_images(output_root, frame, annotated, result)
-            upload(args.server_url, image_path, args, result, defect_type, confidence)
+            jpeg_ok, jpeg_buffer = cv2.imencode(
+                ".jpg",
+                annotated,
+                [int(cv2.IMWRITE_JPEG_QUALITY), max(1, min(100, args.jpeg_quality))],
+            )
+            if jpeg_ok:
+                web_state.update_frame(
+                    jpeg_buffer.tobytes(),
+                    result=result,
+                    defectType=defect_type,
+                    confidence=f"{confidence:.1%}",
+                    detections=len(detections),
+                    uploadStatus="uploading",
+                    uploadError="-",
+                    imagePath=str(image_path),
+                    updatedAt=datetime.now().isoformat(timespec="seconds"),
+                )
+
+            uploaded = upload(args.server_url, image_path, args, result, defect_type, confidence)
+            web_state.update(
+                uploadStatus="success" if uploaded else "failed",
+                uploadError="-" if uploaded else f"Upload failed after {args.retry} attempts",
+                updatedAt=datetime.now().isoformat(timespec="seconds"),
+            )
             logging.info(
-                "detect done result=%s detections=%s confidence=%.4f image=%s",
+                "detect done result=%s detections=%s confidence=%.4f uploaded=%s image=%s",
                 result,
                 len(detections),
                 confidence,
+                uploaded,
                 image_path,
             )
 
@@ -195,6 +410,10 @@ def main() -> None:
                 break
             time.sleep(max(0.0, args.interval))
     finally:
+        web_state.update(stopped=True, uploadStatus="stopped")
+        if web_server:
+            web_server.shutdown()
+            web_server.server_close()
         capture.release()
         if args.preview:
             cv2.destroyAllWindows()

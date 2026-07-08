@@ -61,7 +61,24 @@ $env:YOLO_DEVICE="cpu"
 .\scripts\run_sender_windows.bat
 ```
 
+Open the sender live preview page on the Windows host:
+
+```text
+http://127.0.0.1:8090
+```
+
+The receiver dashboard shows uploaded history and saved result images. The sender live page shows the current camera inference frame, model result, confidence, local image path, and upload status.
+
 CPU mode is enough when the Windows host does not have an NVIDIA GPU or CUDA PyTorch installed.
+
+If upload logs mention `127.0.0.1:7890`, Windows system proxy is intercepting the request. The sender disables system proxy by default. For old copies of the sender, clear proxy variables before running:
+
+```powershell
+$env:HTTP_PROXY=""
+$env:HTTPS_PROXY=""
+$env:ALL_PROXY=""
+$env:NO_PROXY="*"
+```
 
 For NVIDIA GPU, install CUDA PyTorch from:
 

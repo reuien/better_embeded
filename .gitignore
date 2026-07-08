@@ -11,4 +11,5 @@ receiver/uploads/
 receiver/logs/
 front/node_modules/
 front/dist/
-.codebase-memory
+.codebase-memory/
+.idea/
