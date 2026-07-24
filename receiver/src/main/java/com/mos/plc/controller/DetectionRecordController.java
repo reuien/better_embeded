@@ -40,19 +40,57 @@ public class DetectionRecordController {
         return ApiResponse.success(service.create(image, deviceId, result, defectType, confidence, detectTime));
     }
 
-    @GetMapping("/api/detection-records")
+    @PostMapping("/api/detection/upload")
+    public ApiResponse<DetectionRecordResponse> uploadBoardDetection(
+            @RequestPart("original_image") MultipartFile originalImage,
+            @RequestPart("result_image") MultipartFile resultImage,
+            @RequestParam("device_id") String deviceId,
+            @RequestParam("pcb_id") String pcbId,
+            @RequestParam(value = "capture_time", required = false) String captureTime,
+            @RequestParam String result,
+            @RequestParam(value = "inference_time_ms", required = false) Integer inferenceTimeMs,
+            @RequestParam(required = false) String defects
+    ) throws IOException {
+        return ApiResponse.success(service.createBoardUpload(
+                originalImage,
+                resultImage,
+                deviceId,
+                pcbId,
+                captureTime,
+                result,
+                inferenceTimeMs,
+                defects
+        ));
+    }
+
+    @GetMapping({"/api/detection-records", "/api/detection/list"})
     public ApiResponse<PageResponse<DetectionRecordResponse>> search(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             @RequestParam(required = false) String deviceId,
+            @RequestParam(required = false) String pcbId,
+            @RequestParam(value = "pcb_id", required = false) String pcbIdSnake,
             @RequestParam(required = false) String defectType,
             @RequestParam(required = false) String result,
             @PageableDefault(sort = "detectTime", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ApiResponse.success(PageResponse.from(service.search(startTime, endTime, deviceId, defectType, result, pageable)));
+        return ApiResponse.success(PageResponse.from(service.search(
+                startTime,
+                endTime,
+                deviceId,
+                firstNonBlank(pcbId, pcbIdSnake),
+                defectType,
+                result,
+                pageable
+        )));
     }
 
-    @GetMapping("/api/detection-records/{id}")
+    @GetMapping("/api/detection/latest")
+    public ApiResponse<DetectionRecordResponse> latest() {
+        return ApiResponse.success(service.latest());
+    }
+
+    @GetMapping({"/api/detection-records/{id}", "/api/detection/{id}"})
     public ApiResponse<DetectionRecordResponse> get(@PathVariable Long id) {
         return ApiResponse.success(service.get(id));
     }
@@ -61,5 +99,14 @@ public class DetectionRecordController {
     public ApiResponse<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ApiResponse.success();
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 }

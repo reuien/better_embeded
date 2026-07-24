@@ -16,6 +16,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.NOT_FOUND, 404, exc.getMessage());
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> conflict(ConflictException exc) {
+        return error(HttpStatus.CONFLICT, 409, exc.getMessage());
+    }
+
     @ExceptionHandler({IllegalArgumentException.class, IOException.class})
     public ResponseEntity<ApiResponse<Void>> badRequest(Exception exc) {
         return error(HttpStatus.BAD_REQUEST, 400, exc.getMessage());

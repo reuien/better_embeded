@@ -12,16 +12,22 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    open-in-view: false
     database-platform: org.hibernate.community.dialect.SQLiteDialect
   servlet:
     multipart:
       max-file-size: 25MB
-      max-request-size: 30MB
+      max-request-size: 60MB
 
 plc:
   upload-root: uploads
   frontend-dir: ../front/dist
   device-online-seconds: 60
+  replay:
+    enabled: false
+    check-interval-ms: 1000
+    max-active-records: 100
+    scheduled-records: []
 
 logging:
   file:

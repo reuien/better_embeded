@@ -10,6 +10,20 @@ export interface PageResponse<T> {
   totalPages: number;
   number: number;
   size: number;
+  first?: boolean;
+  last?: boolean;
+  empty?: boolean;
+  numberOfElements?: number;
+}
+
+export interface DetectionDefect {
+  id: number;
+  className: string;
+  confidence: number;
+  x1?: number;
+  y1?: number;
+  x2?: number;
+  y2?: number;
 }
 
 export interface DetectionRecord {
@@ -23,6 +37,17 @@ export interface DetectionRecord {
   imageUrl: string;
   detectTime: string;
   createdAt: string;
+  pcbId?: string;
+  captureTime?: string;
+  defectCount?: number;
+  inferenceTimeMs?: number;
+  originalFilename?: string;
+  originalImagePath?: string;
+  originalImageUrl?: string;
+  resultFilename?: string;
+  resultImagePath?: string;
+  resultImageUrl?: string;
+  defects?: DetectionDefect[];
 }
 
 export interface Statistics {

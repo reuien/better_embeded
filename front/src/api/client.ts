@@ -15,11 +15,15 @@ export async function getStatistics(): Promise<ApiResponse<Statistics>> {
 }
 
 export async function getRecords(params: Query): Promise<ApiResponse<PageResponse<DetectionRecord>>> {
-  return http.get("/api/detection-records", { params });
+  return http.get("/api/detection/list", { params });
 }
 
 export async function deleteRecord(id: number): Promise<ApiResponse<void>> {
   return http.delete(`/api/detection-records/${id}`);
+}
+
+export async function getLatestRecord(): Promise<ApiResponse<DetectionRecord>> {
+  return http.get("/api/detection/latest");
 }
 
 export async function getLogs(params: Query): Promise<ApiResponse<PageResponse<LogEntry>>> {

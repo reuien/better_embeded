@@ -86,6 +86,30 @@ The receiver dashboard shows uploaded history and saved result images. The sende
 
 CPU mode is enough when the Windows host does not have an NVIDIA GPU or CUDA PyTorch installed.
 
+## Scheduled Receiver Replay
+
+The receiver can replay existing images as temporary new records without changing the database. Configure it in `receiver/src/main/resources/application.yml` when a demo schedule is needed:
+
+```yaml
+plc:
+  replay:
+    enabled: true
+    scheduled-records:
+      - delay-seconds: 36
+        filename: "replay_01_defect.png"
+        device-id: "SCHEDULED-REPLAY"
+        result: "defect"
+        defect-type: "missing"
+        confidence: 0.98
+      - delay-seconds: 68
+        filename: "replay_02_normal.jpg"
+        result: "normal"
+        defect-type: "none"
+        confidence: 0.0
+```
+
+Use `delay-seconds` for a replay relative to receiver startup, or `time` for an absolute local time. Use `record-id` to replay an existing database row, `filename` to replay a file under `receiver/uploads`, or `image-path` for an absolute image path. The replayed records only live in memory and use negative IDs, so deleting them from the page removes only the temporary display record.
+
 If upload logs mention `127.0.0.1:7890`, Windows system proxy is intercepting the request. The sender disables system proxy by default. For old copies of the sender, clear proxy variables before running:
 
 ```powershell

@@ -32,7 +32,6 @@
       <el-header class="topbar">
         <div>
           <h1>{{ title }}</h1>
-          <p>Windows 发送端上传检测图像，macOS 接收端负责管理与统计。</p>
         </div>
         <el-button :icon="Refresh" @click="refreshAll">刷新</el-button>
       </el-header>
@@ -183,7 +182,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { DataAnalysis, Delete, Document, Monitor, Picture, Refresh, Search, View } from "@element-plus/icons-vue";
 import * as echarts from "echarts";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -205,6 +204,7 @@ const recordFilters = ref({ deviceId: "", result: "", defectType: "" });
 const logFilters = ref({ level: "", keyword: "" });
 const previewVisible = ref(false);
 const selectedRecord = ref<DetectionRecord | null>(null);
+let liveRefreshTimer: number | undefined;
 
 const title = computed(() => ({
   dashboard: "首页统计",
@@ -213,7 +213,20 @@ const title = computed(() => ({
   status: "系统状态",
 }[activeView.value] || "PLC 缺陷检测"));
 
-onMounted(refreshAll);
+onMounted(() => {
+  refreshAll();
+  liveRefreshTimer = window.setInterval(() => {
+    if (activeView.value === "dashboard") {
+      loadStatistics().catch(() => undefined);
+    }
+    if (activeView.value === "records") {
+      loadRecords().catch(() => undefined);
+    }
+  }, 2000);
+});
+onUnmounted(() => {
+  if (liveRefreshTimer !== undefined) window.clearInterval(liveRefreshTimer);
+});
 watch(activeView, () => nextTick(refreshAll));
 
 async function refreshAll() {

@@ -25,12 +25,43 @@ public class ImageController {
         this.storageService = storageService;
     }
 
-    @GetMapping("/api/images/{filename}")
+    @GetMapping({"/api/images/{filename}", "/files/{filename}"})
     public ResponseEntity<Resource> image(@PathVariable String filename) throws Exception {
-        Path path = repository.findFirstByFilenameOrderByIdDesc(filename)
-                .map(DetectionRecord::getImagePath)
+        Path path = repository.findFirstByResultFilenameOrderByIdDesc(filename)
+                .map(DetectionRecord::getResultImagePath)
+                .map(Path::of)
+                .or(() -> repository.findFirstByOriginalFilenameOrderByIdDesc(filename)
+                        .map(DetectionRecord::getOriginalImagePath)
+                        .map(Path::of))
+                .or(() -> repository.findFirstByFilenameOrderByIdDesc(filename)
+                        .map(DetectionRecord::getImagePath)
+                        .map(Path::of))
+                .orElseGet(() -> storageService.resolveExisting(filename));
+        return imageResponse(filename, path);
+    }
+
+    @GetMapping("/files/original/{filename}")
+    public ResponseEntity<Resource> originalImage(@PathVariable String filename) throws Exception {
+        Path path = repository.findFirstByOriginalFilenameOrderByIdDesc(filename)
+                .map(DetectionRecord::getOriginalImagePath)
                 .map(Path::of)
                 .orElseGet(() -> storageService.resolveExisting(filename));
+        return imageResponse(filename, path);
+    }
+
+    @GetMapping("/files/result/{filename}")
+    public ResponseEntity<Resource> resultImage(@PathVariable String filename) throws Exception {
+        Path path = repository.findFirstByResultFilenameOrderByIdDesc(filename)
+                .map(DetectionRecord::getResultImagePath)
+                .map(Path::of)
+                .or(() -> repository.findFirstByFilenameOrderByIdDesc(filename)
+                        .map(DetectionRecord::getImagePath)
+                        .map(Path::of))
+                .orElseGet(() -> storageService.resolveExisting(filename));
+        return imageResponse(filename, path);
+    }
+
+    private ResponseEntity<Resource> imageResponse(String filename, Path path) throws Exception {
         if (path == null || !Files.exists(path)) {
             throw new NotFoundException("Image not found: " + filename);
         }
