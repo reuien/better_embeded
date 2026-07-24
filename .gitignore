@@ -2,7 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
-sender/.venv/
+sender/
 sender_output/
 logs/
 receiver/target/
@@ -13,3 +13,6 @@ front/node_modules/
 front/dist/
 .codebase-memory/
 .idea/
+board_rgn/
+models/
+scripts/
