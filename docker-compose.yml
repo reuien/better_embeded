@@ -1,0 +1,22 @@
+services:
+  plc-receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mos-plc-receiver:latest
+    container_name: mos-plc-receiver
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: 8080
+      PLC_FRONTEND_DIR: /app/front/dist
+      PLC_UPLOAD_ROOT: /app/uploads
+      SPRING_DATASOURCE_URL: jdbc:sqlite:/app/data/plc_detection.db
+      LOGGING_FILE_NAME: /app/logs/receiver.log
+    volumes:
+      - ./runtime/data:/app/data
+      - ./runtime/uploads:/app/uploads
+      - ./runtime/logs:/app/logs
+    restart: unless-stopped
